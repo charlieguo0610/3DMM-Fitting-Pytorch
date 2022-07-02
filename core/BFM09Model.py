@@ -79,22 +79,22 @@ class BFM09ReconModel(BaseReconModel):
         batch_num = coeffs.shape[0]
 
         id_coeff, exp_coeff, tex_coeff, angles, gamma, translation = self.split_coeffs(
-            coeffs)
+            coeffs) # for a total of 256 dimension 
 
-        vs = self.get_vs(id_coeff, exp_coeff)
+        vs = self.get_vs(id_coeff, exp_coeff) # 1 x 35709 x 3
 
-        rotation = self.compute_rotation_matrix(angles)
+        rotation = self.compute_rotation_matrix(angles) # 1 x 3 x 3
 
         vs_t = self.rigid_transform(
-            vs, rotation, translation)
+            vs, rotation, translation) # 1 x 35709 x 3
 
-        lms_t = self.get_lms(vs_t)
-        lms_proj = self.project_vs(lms_t)
+        lms_t = self.get_lms(vs_t) # 1 x 68 x 3
+        lms_proj = self.project_vs(lms_t) # 1 x 68 x 2
         lms_proj = torch.stack(
             [lms_proj[:, :, 0], self.img_size-lms_proj[:, :, 1]], dim=2)
         if render:
             face_texture = self.get_color(tex_coeff)
-            face_norm = self.compute_norm(vs, self.tri, self.point_buf)
+            face_norm = self.compute_norm(vs, self.tri, self.point_buf) # 1 x 35709 x 3
             face_norm_r = face_norm.bmm(rotation)
             face_color = self.add_illumination(
                 face_texture, face_norm_r, gamma)
@@ -105,12 +105,12 @@ class BFM09ReconModel(BaseReconModel):
             rendered_img = self.renderer(mesh)
             rendered_img = torch.clamp(rendered_img, 0, 255)
 
-            return {'rendered_img': rendered_img,
-                    'lms_proj': lms_proj,
-                    'face_texture': face_texture,
-                    'vs': vs_t,
-                    'tri': self.tri,
-                    'color': face_color}
+            return {'rendered_img': rendered_img, # 1 x 256 x 256 x 4
+                    'lms_proj': lms_proj, # 1 x 68 x 2
+                    'face_texture': face_texture, # 1 x 35709 x 3
+                    'vs': vs_t, # 1 x 35709 x 3
+                    'tri': self.tri, # 70789 x 3
+                    'color': face_color} # w/ illumination 1 x 35709 x 3
         else:
             return {'lms_proj': lms_proj}
 
@@ -119,7 +119,7 @@ class BFM09ReconModel(BaseReconModel):
 
         face_shape = torch.einsum('ij,aj->ai', self.idBase, id_coeff) + \
             torch.einsum('ij,aj->ai', self.expBase, exp_coeff) + self.meanshape
-
+        # 107127 x 80, 1 x 80 -> 1 x 107127 i.e. for each point, we calculate the weight sum of basis component
         face_shape = face_shape.view(n_b, -1, 3)
         face_shape = face_shape - \
             self.meanshape.view(1, -1, 3).mean(dim=1, keepdim=True)
